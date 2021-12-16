@@ -133,10 +133,13 @@ export class OAuth2Service extends EventEmitter {
       express.urlencoded({ extended: false }),
       this.tokenHandler
     );
-    app.get(AUTHORIZE_PATH, this.authorizeHandler);
+    app.get(AUTHORIZE_PATH, this.getAuthorizeHandler);
     app.get(USERINFO_PATH, this.userInfoHandler);
     app.post(REVOKE_PATH, this.revokeHandler);
     app.get(END_SESSION_ENDPOINT_PATH, this.endSessionHandler);
+
+    app.use(express.urlencoded({ extended: false }));
+    app.post(AUTHORIZE_PATH, this.postAuthorizeHandler);
 
     return app;
   };
@@ -277,18 +280,24 @@ export class OAuth2Service extends EventEmitter {
     }
   };
 
-  private authorizeHandler: RequestHandler = (req, res) => {
+  private getAuthorizeHandler: RequestHandler = (req, res) => {
+    const [_, query] = req.url.split('?', 2);
+    res.writeHead(200, { 'Content-Type': 'text/html' });
+    res.write('<form method="POST" action="/authorize?' + query + '"><input type="text" name="username" id="username"><input type="submit" value="Login"></form>');
+    res.end();
+    return;
+  };
+
+  private postAuthorizeHandler: RequestHandler = async (req, res) => {
     const { scope, state } = req.query;
     const responseType = req.query.response_type;
     const redirectUri = req.query.redirect_uri;
-    const code = uuidv4();
-
-    let queryNonce: string | undefined;
 
     if ('nonce' in req.query) {
       assertIsString(req.query.nonce, 'Invalid nonce type');
-      queryNonce = req.query.nonce;
     }
+
+    const reqBody = req.body;
 
     assertIsString(redirectUri, 'Invalid redirectUri type');
     assertIsString(scope, 'Invalid scope type');
@@ -297,10 +306,7 @@ export class OAuth2Service extends EventEmitter {
     const url = new URL(redirectUri);
 
     if (responseType === 'code') {
-      if (queryNonce !== undefined) {
-        this.#nonce[code] = queryNonce;
-      }
-      url.searchParams.set('code', code);
+      url.searchParams.set('code', reqBody.username);
       url.searchParams.set('scope', scope);
       url.searchParams.set('state', state);
     } else {
